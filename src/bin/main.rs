@@ -1,8 +1,7 @@
-use std::time::Duration;
-
+use anyhow::Context;
 use async_shutdown::ShutdownManager;
 use clap::Parser;
-use svix_takehome::{AppContext, Config, Shutdown, spawn_tasks};
+use svix_takehome::{AppConfig, AppContext, spawn_tasks};
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -13,10 +12,12 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let config = Config::parse();
-    let shutdown: ShutdownManager<()> = Shutdown::new();
+    let config = AppConfig::parse();
+    let shutdown = ShutdownManager::new();
     let context = AppContext::new(config.clone(), shutdown.clone());
-    spawn_tasks(context).await;
+    spawn_tasks(context)
+        .await
+        .context("failed to initialize service")?;
 
     // Wait for shutdown to be triggered
     tokio::select! {

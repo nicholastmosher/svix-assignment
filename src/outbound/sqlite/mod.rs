@@ -4,8 +4,8 @@ use anyhow::{Context as _, Result};
 
 pub mod webhook_tasks;
 
+#[derive(Debug, Clone)]
 pub struct Sqlite {
-    //
     pool: sqlx::SqlitePool,
 }
 

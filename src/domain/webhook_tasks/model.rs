@@ -56,6 +56,8 @@ impl WebhookTask {
     }
 }
 
+// --- Domain-level data types
+
 #[derive(Clone, Debug, Display, PartialEq, Eq, PartialOrd, Ord, Hash, From, sqlx::Type)]
 #[sqlx(transparent)]
 pub struct WebhookTaskId(#[from] Uuid);

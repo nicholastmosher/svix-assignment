@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result};
 use axum::{Router, routing::post};
 
 use crate::{
-    domain::webhook_tasks::ports::WebhookTaskService,
+    AppConfig, domain::webhook_tasks::ports::WebhookTaskService,
     inbound::http::webhook_tasks::create_webhook_task,
 };
 
@@ -12,6 +12,14 @@ pub mod webhook_tasks;
 
 pub struct HttpConfig {
     pub port: u16,
+}
+
+impl From<&AppConfig> for HttpConfig {
+    fn from(config: &AppConfig) -> Self {
+        HttpConfig {
+            port: config.http_port,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
