@@ -1,7 +1,7 @@
 -- Add migration script here
 
 CREATE TABLE webhooks (
-    id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY NOT NULL,
     deadline TEXT NOT NULL,
     url TEXT NOT NULL,
     body TEXT NOT NULL,

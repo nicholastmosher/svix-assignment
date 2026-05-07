@@ -37,4 +37,9 @@ where
         let webhook_task = self.repo.create_webhook_task(req).await?;
         Ok(webhook_task)
     }
+
+    async fn get_upcoming_webhook_tasks(&self, count: u32) -> Result<Vec<WebhookTask>> {
+        let upcoming_tasks = self.repo.get_upcoming_webhook_tasks(count).await?;
+        Ok(upcoming_tasks)
+    }
 }

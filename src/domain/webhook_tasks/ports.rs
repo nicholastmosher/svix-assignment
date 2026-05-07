@@ -8,6 +8,11 @@ pub trait WebhookTaskService: 'static + Clone + Send + Sync {
         &self,
         req: &CreateWebhookTaskRequest,
     ) -> impl Future<Output = Result<WebhookTask>> + Send;
+
+    fn get_upcoming_webhook_tasks(
+        &self,
+        count: u32,
+    ) -> impl Future<Output = Result<Vec<WebhookTask>>> + Send;
 }
 
 /// Storage behavior for WebhookTasks.
@@ -19,4 +24,9 @@ pub trait WebhookTaskRepository: 'static + Clone + Send + Sync {
         &self,
         req: &CreateWebhookTaskRequest,
     ) -> impl Future<Output = Result<WebhookTask>> + Send;
+
+    fn get_upcoming_webhook_tasks(
+        &self,
+        count: u32,
+    ) -> impl Future<Output = Result<Vec<WebhookTask>>> + Send;
 }

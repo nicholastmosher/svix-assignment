@@ -1,5 +1,7 @@
 //! Domain-level object for a webhook task.
 
+use std::str::FromStr;
+
 use chrono::Utc;
 use derive_more::{Display, From};
 use thiserror::Error;
@@ -8,19 +10,19 @@ use uuid::Uuid;
 
 pub struct WebhookTask {
     /// Unique ID for the webhook task.
-    id: WebhookTaskId,
+    pub id: WebhookTaskId,
 
     /// The scheduled deadline at which to execute the webhook task.
-    deadline: WebhookTaskDeadline,
+    pub deadline: WebhookTaskDeadline,
 
     /// The destination URL to send the webhook body at the deadline.
-    url: WebhookTaskUrl,
+    pub url: WebhookTaskUrl,
 
     /// The webhook body to send to the url at the deadline.
-    body: WebhookTaskBody,
+    pub body: WebhookTaskBody,
 
     /// The timestamp at which the webhook task was executed.
-    executed_at: Option<WebhookTaskExecutedAt>,
+    pub executed_at: Option<WebhookTaskExecutedAt>,
 }
 
 impl WebhookTask {
@@ -64,6 +66,12 @@ pub struct WebhookTaskId(#[from] Uuid);
 impl WebhookTaskId {
     pub fn generate() -> Self {
         Self(Uuid::new_v4())
+    }
+}
+impl FromStr for WebhookTaskId {
+    type Err = <Uuid as FromStr>::Err;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(s.parse()?)
     }
 }
 

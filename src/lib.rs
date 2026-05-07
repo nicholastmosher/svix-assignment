@@ -41,7 +41,8 @@ impl AppContext {
 pub async fn spawn_tasks(cx: AppContext) -> Result<()> {
     let sqlite = Sqlite::new(&cx.config.database_url).await?;
     let webhook_service = Service::new(sqlite);
-    let _http_handle = spawn_http_server(cx, webhook_service).await?;
+    let _http_handle = spawn_http_server(cx.clone(), webhook_service.clone()).await?;
+    let _worker_handle = spawn_schedule_worker(cx, webhook_service).await?;
     Ok(())
 }
 
@@ -58,4 +59,11 @@ pub async fn spawn_http_server(
     let task_handle = tokio::spawn(future);
 
     Ok(task_handle)
+}
+
+pub async fn spawn_schedule_worker(
+    cx: AppContext,
+    webhook_service: impl WebhookTaskService,
+) -> Result<JoinHandle<Result<()>>> {
+    todo!()
 }

@@ -1,5 +1,9 @@
+use std::str::FromStr;
+
 use anyhow::{Context, Result};
+use chrono::Utc;
 use sqlx::{Executor, Transaction};
+use url::Url;
 
 use crate::{
     domain::webhook_tasks::{
@@ -33,6 +37,20 @@ impl Sqlite {
         tx.execute(query).await?;
         Ok(id)
     }
+
+    async fn get_upcoming_webhook_tasks(
+        &self,
+        pool: &sqlx::SqlitePool,
+        count: u32,
+    ) -> Result<Vec<WebhookTaskDto>> {
+        let query = sqlx::query_as!(
+            WebhookTaskDto,
+            "SELECT id, deadline, url, body FROM webhooks WHERE executed_at IS NULL ORDER BY deadline ASC LIMIT $1",
+            count,
+        );
+        let rows = query.fetch_all(pool).await?;
+        Ok(rows)
+    }
 }
 
 impl WebhookTaskRepository for Sqlite {
@@ -57,5 +75,38 @@ impl WebhookTaskRepository for Sqlite {
         let webhook_task =
             WebhookTask::new(id, req.deadline.clone(), req.url.clone(), req.body.clone());
         Ok(webhook_task)
+    }
+
+    async fn get_upcoming_webhook_tasks(&self, count: u32) -> Result<Vec<WebhookTask>> {
+        let dtos = self.get_upcoming_webhook_tasks(&self.pool, count).await?;
+        let webhook_tasks = dtos
+            .into_iter()
+            .map(|dto| WebhookTask::try_from(dto))
+            .collect::<Result<Vec<WebhookTask>>>()?;
+        Ok(webhook_tasks)
+    }
+}
+
+struct WebhookTaskDto {
+    //
+    id: String,
+    deadline: String,
+    url: String,
+    body: String,
+}
+
+impl TryFrom<WebhookTaskDto> for WebhookTask {
+    type Error = anyhow::Error;
+
+    fn try_from(dto: WebhookTaskDto) -> Result<Self> {
+        let deadline = dto.deadline.parse::<chrono::DateTime<Utc>>()?;
+        let url = dto.url.parse::<Url>()?;
+        Ok(WebhookTask {
+            id: WebhookTaskId::from_str(&dto.id).context("invalid WebhookTask id from Db")?,
+            deadline: WebhookTaskDeadline::from(deadline),
+            url: WebhookTaskUrl::from(url),
+            body: WebhookTaskBody::from(dto.body),
+            executed_at: None,
+        })
     }
 }
