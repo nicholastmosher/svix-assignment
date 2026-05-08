@@ -3,7 +3,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use sqlx::{Executor, Transaction};
-use tracing::{debug, info};
+use tracing::debug;
 use url::Url;
 
 use crate::{

@@ -57,7 +57,8 @@ impl HashTaskId {
 impl FromStr for HashTaskId {
     type Err = <Uuid as FromStr>::Err;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(s.parse()?)
+        let uuid = s.parse::<Uuid>()?;
+        Ok(Self(uuid))
     }
 }
 
@@ -68,6 +69,11 @@ pub struct HashTaskDeadline(#[from] chrono::DateTime<Utc>);
 #[derive(Clone, Debug, Display, PartialEq, Eq, PartialOrd, Ord, Hash, From, sqlx::Type)]
 #[sqlx(transparent)]
 pub struct HashTaskSecret(#[from] String);
+impl HashTaskSecret {
+    pub fn data(&self) -> &str {
+        &self.0
+    }
+}
 
 #[derive(Clone, Debug, Display, PartialEq, Eq, PartialOrd, Ord, Hash, From, sqlx::Type)]
 #[sqlx(transparent)]

@@ -1,9 +1,16 @@
 //! The ScheduleWorker runs on a stream of [`ScheduleWorkerInput`] events,
 //! dispatching tasks as necessary
 
-use std::{collections::HashMap, ops::ControlFlow, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    hash::{DefaultHasher, Hash, Hasher},
+    ops::ControlFlow,
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::{Context as _, Result};
+use base64::{Engine, prelude::BASE64_STANDARD};
 use futures::{FutureExt, Stream, StreamExt as _};
 use tokio_stream::wrappers::IntervalStream;
 use tracing::{debug, error, info};
@@ -66,7 +73,6 @@ pub struct ScheduleWorkerState {
     client: reqwest::Client,
     hash_task_service: Arc<dyn DynHashTaskService>,
     webhook_task_service: Arc<dyn DynWebhookTaskService>,
-    inflight_tasks: HashMap<WebhookTaskId, WebhookTask>,
 }
 
 impl ScheduleWorkerState {
@@ -84,7 +90,6 @@ impl ScheduleWorkerState {
             client,
             hash_task_service: Arc::new(hash_task_service),
             webhook_task_service: Arc::new(webhook_task_service),
-            inflight_tasks: Default::default(),
         })
     }
 
@@ -181,7 +186,7 @@ impl ScheduleWorkerState {
             .context("failed to fetch upcoming tasks from service")?;
 
         for task in upcoming_tasks {
-            let future = dispatch_hash_task(task);
+            let future = dispatch_hash_task(self.hash_task_service.clone(), task);
             // Prevent shutdown until all tasks complete
             let future = self
                 .context
@@ -218,12 +223,38 @@ impl ScheduleWorkerState {
     }
 }
 
-pub async fn dispatch_hash_task(task: HashTask) -> Result<()> {
-    //
-    Ok(())
+pub async fn dispatch_hash_task(service: Arc<dyn DynHashTaskService>, task: HashTask) {
+    let result = try_dispatch_hash_task(service, task).await;
+    if let Err(error) = result {
+        error!(?error, "Error while executing hash task");
+    }
 }
 
-pub async fn try_dispatch_hash_task() -> Result<()> {
+pub async fn try_dispatch_hash_task(
+    service: Arc<dyn DynHashTaskService>,
+    task: HashTask,
+) -> Result<()> {
+    let id = task.id().clone();
+    info!(?id, "Beginning hash task execution");
+    let data = task.secret().data().to_string();
+
+    // Hashing is compute-heavy so use spawn_blocking to avoid blocking the task thread
+    tokio::task::spawn_blocking({
+        let id = id.clone();
+        move || {
+            let mut hasher = DefaultHasher::new();
+            for _ in 0..600_000 {
+                data.hash(&mut hasher);
+            }
+            let hash = hasher.finish();
+            let bytes = hash.to_le_bytes();
+            let output = BASE64_STANDARD.encode(&bytes);
+            info!(?id, output, "Completed hash task")
+        }
+    })
+    .await?;
+
+    service.finish_hash_task(&id).await?;
     Ok(())
 }
 

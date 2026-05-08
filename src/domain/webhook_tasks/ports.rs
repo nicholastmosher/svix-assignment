@@ -2,9 +2,7 @@ use std::pin::Pin;
 
 use anyhow::Result;
 
-use crate::domain::webhook_tasks::model::{
-    CreateWebhookTaskRequest, FinishWebhookTaskRequest, WebhookTask, WebhookTaskId,
-};
+use crate::domain::webhook_tasks::model::{CreateWebhookTaskRequest, WebhookTask, WebhookTaskId};
 
 /// Domain behavior for services working with WebhookTasks.
 pub trait WebhookTaskService: 'static + Clone + Send + Sync {

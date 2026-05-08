@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::domain::hash_tasks::{
-    model::{CreateHashTaskRequest, HashTask},
+    model::{CreateHashTaskRequest, HashTask, HashTaskId},
     ports::{HashTaskRepository, HashTaskService},
 };
 
@@ -34,5 +34,10 @@ where
     async fn get_ready_hash_tasks(&self, count: u32) -> Result<Vec<HashTask>> {
         let upcoming_tasks = self.repo.get_ready_hash_tasks(count).await?;
         Ok(upcoming_tasks)
+    }
+
+    async fn finish_hash_task(&self, id: &HashTaskId) -> Result<()> {
+        self.repo.finish_hash_task(id).await?;
+        Ok(())
     }
 }

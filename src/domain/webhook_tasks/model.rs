@@ -122,9 +122,3 @@ pub enum CreateWebhookTaskError {
     #[error(transparent)]
     Unknown(#[from] anyhow::Error),
 }
-
-/// Indicates that the given WebhookTask has been successfully executed.
-#[derive(Debug, Clone)]
-pub struct FinishWebhookTaskRequest {
-    pub id: WebhookTaskId,
-}

@@ -2,7 +2,7 @@ use std::{future::Future, pin::Pin};
 
 use anyhow::Result;
 
-use crate::domain::hash_tasks::model::{CreateHashTaskRequest, HashTask};
+use crate::domain::hash_tasks::model::{CreateHashTaskRequest, HashTask, HashTaskId};
 
 /// Domain behavior for services working with HashTasks.
 pub trait HashTaskService: 'static + Clone + Send + Sync {
@@ -15,6 +15,8 @@ pub trait HashTaskService: 'static + Clone + Send + Sync {
         &self,
         limit: u32,
     ) -> impl Future<Output = Result<Vec<HashTask>>> + Send;
+
+    fn finish_hash_task(&self, id: &HashTaskId) -> impl Future<Output = Result<()>> + Send;
 }
 
 pub trait DynHashTaskService: 'static + Send + Sync {
@@ -27,6 +29,9 @@ pub trait DynHashTaskService: 'static + Send + Sync {
         &self,
         limit: u32,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<HashTask>>> + Send>>;
+
+    fn finish_hash_task(&self, id: &HashTaskId)
+    -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
 }
 
 impl<T: HashTaskService> DynHashTaskService for T {
@@ -52,6 +57,18 @@ impl<T: HashTaskService> DynHashTaskService for T {
             Ok(hash_tasks)
         })
     }
+
+    fn finish_hash_task(
+        &self,
+        id: &HashTaskId,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
+        let this = self.clone();
+        let id = id.clone();
+        Box::pin(async move {
+            this.finish_hash_task(&id).await?;
+            Ok(())
+        })
+    }
 }
 
 /// Storage behavior for HashTasks.
@@ -68,4 +85,6 @@ pub trait HashTaskRepository: 'static + Clone + Send + Sync {
         &self,
         count: u32,
     ) -> impl Future<Output = Result<Vec<HashTask>>> + Send;
+
+    fn finish_hash_task(&self, id: &HashTaskId) -> impl Future<Output = Result<()>> + Send;
 }

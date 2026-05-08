@@ -51,6 +51,20 @@ impl Sqlite {
         let rows = query.fetch_all(pool).await?;
         Ok(rows)
     }
+
+    async fn finish_hash_task(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        id: &HashTaskId,
+    ) -> Result<()> {
+        let id = &id.to_string();
+        let query = sqlx::query!(
+            "UPDATE hashtasks SET executed_at = datetime('now') WHERE id = $1",
+            id,
+        );
+        tx.execute(query).await?;
+        Ok(())
+    }
 }
 
 impl HashTaskRepository for Sqlite {
@@ -83,6 +97,21 @@ impl HashTaskRepository for Sqlite {
             .map(|dto| HashTask::try_from(dto))
             .collect::<Result<Vec<HashTask>>>()?;
         Ok(hash_tasks)
+    }
+
+    async fn finish_hash_task(&self, id: &HashTaskId) -> Result<()> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .context("failed to start finish_hash_task transaction")?;
+
+        self.finish_hash_task(&mut tx, id).await?;
+
+        tx.commit()
+            .await
+            .context("failed to commit finish_hash_task transaction")?;
+        Ok(())
     }
 }
 

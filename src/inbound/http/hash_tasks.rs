@@ -139,8 +139,7 @@ pub struct ApiErrorData {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct CreateHashTaskHttpRequestBody {
     deadline: chrono::DateTime<Utc>,
-    algorithm: String,
-    input: String,
+    secret: String,
 }
 
 impl CreateHashTaskHttpRequestBody {
@@ -149,7 +148,7 @@ impl CreateHashTaskHttpRequestBody {
     /// Better validation would go here
     fn try_into_domain(self) -> Result<CreateHashTaskRequest> {
         let deadline = HashTaskDeadline::from(self.deadline);
-        let secret = HashTaskSecret::from(self.input);
+        let secret = HashTaskSecret::from(self.secret);
         let request = CreateHashTaskRequest { deadline, secret };
         Ok(request)
     }

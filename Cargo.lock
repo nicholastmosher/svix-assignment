@@ -2377,6 +2377,7 @@ dependencies = [
  "anyhow",
  "async-shutdown",
  "axum",
+ "base64",
  "chrono",
  "clap",
  "derive_more",
