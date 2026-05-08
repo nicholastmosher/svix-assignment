@@ -82,10 +82,20 @@ pub struct WebhookTaskDeadline(#[from] chrono::DateTime<Utc>);
 #[derive(Clone, Debug, Display, PartialEq, Eq, PartialOrd, Ord, Hash, From, sqlx::Type)]
 #[sqlx(transparent)]
 pub struct WebhookTaskUrl(#[from] Url);
+impl WebhookTaskUrl {
+    pub fn url(&self) -> &Url {
+        &self.0
+    }
+}
 
 #[derive(Clone, Debug, Display, PartialEq, Eq, PartialOrd, Ord, Hash, From, sqlx::Type)]
 #[sqlx(transparent)]
 pub struct WebhookTaskBody(#[from] String);
+impl WebhookTaskBody {
+    pub fn into_body(self) -> String {
+        self.0
+    }
+}
 
 #[derive(Clone, Debug, Display, PartialEq, Eq, PartialOrd, Ord, Hash, From, sqlx::Type)]
 #[sqlx(transparent)]

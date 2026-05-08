@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 use async_shutdown::ShutdownManager;
@@ -8,7 +8,7 @@ use tokio::task::JoinHandle;
 use crate::{
     domain::webhook_tasks::{Service, ports::WebhookTaskService},
     inbound::http::{HttpConfig, HttpServer},
-    outbound::sqlite::Sqlite,
+    outbound::{schedule_worker::ScheduleWorker, sqlite::Sqlite},
 };
 
 pub mod domain;
@@ -23,6 +23,9 @@ pub struct AppConfig {
     pub http_port: u16,
     #[clap(long, default_value = "5s", value_parser = humantime::parse_duration)]
     pub shutdown_timeout: Duration,
+    /// The time between checking for new tasks to dispatch
+    #[clap(long, default_value = "5s", value_parser = humantime::parse_duration)]
+    pub dispatch_period: Duration,
 }
 
 #[derive(derive_more::Debug, Clone)]
@@ -38,7 +41,7 @@ impl AppContext {
     }
 }
 
-pub async fn spawn_tasks(cx: AppContext) -> Result<()> {
+pub async fn spawn_tasks(cx: Arc<AppContext>) -> Result<()> {
     let sqlite = Sqlite::new(&cx.config.database_url).await?;
     let webhook_service = Service::new(sqlite);
     let _http_handle = spawn_http_server(cx.clone(), webhook_service.clone()).await?;
@@ -47,11 +50,11 @@ pub async fn spawn_tasks(cx: AppContext) -> Result<()> {
 }
 
 pub async fn spawn_http_server(
-    cx: AppContext,
-    webhook_service: impl WebhookTaskService,
+    cx: Arc<AppContext>,
+    webhook_task_service: impl WebhookTaskService,
 ) -> Result<JoinHandle<Result<()>>> {
     let http_config = HttpConfig::from(&cx.config);
-    let server = HttpServer::new(&http_config, webhook_service).await?;
+    let server = HttpServer::new(&http_config, webhook_task_service).await?;
 
     let future = server.run();
     // If the HTTP server ever stops, trigger the shutdown
@@ -62,8 +65,9 @@ pub async fn spawn_http_server(
 }
 
 pub async fn spawn_schedule_worker(
-    cx: AppContext,
-    webhook_service: impl WebhookTaskService,
-) -> Result<JoinHandle<Result<()>>> {
-    todo!()
+    cx: Arc<AppContext>,
+    webhook_task_service: impl WebhookTaskService,
+) -> Result<ScheduleWorker> {
+    let handle = ScheduleWorker::spawn(cx, webhook_task_service)?;
+    Ok(handle)
 }
