@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Context;
 use async_shutdown::ShutdownManager;
 use clap::Parser;
@@ -15,6 +17,7 @@ async fn main() -> anyhow::Result<()> {
     let config = AppConfig::parse();
     let shutdown = ShutdownManager::new();
     let context = AppContext::new(config.clone(), shutdown.clone());
+    let context = Arc::new(context);
     spawn_tasks(context)
         .await
         .context("failed to initialize service")?;

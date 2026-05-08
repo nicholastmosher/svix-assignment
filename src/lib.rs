@@ -6,7 +6,7 @@ use clap::Parser;
 use tokio::task::JoinHandle;
 
 use crate::{
-    domain::webhook_tasks::{Service, ports::WebhookTaskService},
+    domain::webhook_tasks::{self, ports::WebhookTaskService},
     inbound::http::{HttpConfig, HttpServer},
     outbound::{schedule_worker::ScheduleWorker, sqlite::Sqlite},
 };
@@ -19,7 +19,7 @@ pub mod outbound;
 pub struct AppConfig {
     #[clap(long, env = "DATABASE_URL")]
     pub database_url: String,
-    #[clap(long, env = "HTTP_PORT")]
+    #[clap(long, env = "HTTP_PORT", default_value = "8080")]
     pub http_port: u16,
     #[clap(long, default_value = "5s", value_parser = humantime::parse_duration)]
     pub shutdown_timeout: Duration,
@@ -43,7 +43,7 @@ impl AppContext {
 
 pub async fn spawn_tasks(cx: Arc<AppContext>) -> Result<()> {
     let sqlite = Sqlite::new(&cx.config.database_url).await?;
-    let webhook_service = Service::new(sqlite);
+    let webhook_service = webhook_tasks::service::Service::new(sqlite);
     let _http_handle = spawn_http_server(cx.clone(), webhook_service.clone()).await?;
     let _worker_handle = spawn_schedule_worker(cx, webhook_service).await?;
     Ok(())
