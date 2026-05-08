@@ -7,39 +7,36 @@ use axum::{
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use tracing::info;
-use url::Url;
 
 use crate::{
     domain::{
-        hash_tasks::ports::HashTaskService,
-        webhook_tasks::{
+        hash_tasks::{
             model::{
-                CreateWebhookTaskError, CreateWebhookTaskRequest, WebhookTask, WebhookTaskBody,
-                WebhookTaskDeadline, WebhookTaskUrl,
+                CreateHashTaskError, CreateHashTaskRequest, HashTask, HashTaskDeadline,
+                HashTaskSecret,
             },
-            ports::WebhookTaskService,
+            ports::HashTaskService,
         },
+        webhook_tasks::ports::WebhookTaskService,
     },
     inbound::http::AppState,
 };
 
-pub async fn create_webhook_task<HS, WS>(
+pub async fn create_hash_task<HS, WS>(
     State(state): State<AppState<HS, WS>>,
-    Json(body): Json<CreateWebhookTaskHttpRequestBody>,
-) -> Result<ApiSuccess<CreateWebhookTaskResponseData>, ApiError>
+    Json(body): Json<CreateHashTaskHttpRequestBody>,
+) -> Result<ApiSuccess<CreateHashTaskResponseData>, ApiError>
 where
     HS: HashTaskService,
     WS: WebhookTaskService,
 {
-    info!("Received request to create webhook task");
     let req = body.try_into_domain()?;
     state
-        .webhook_service
-        .create_webhook_task(&req)
+        .hash_service
+        .create_hash_task(&req)
         .await
         .map_err(ApiError::from)
-        .map(|ref webhook_task| ApiSuccess::new(StatusCode::CREATED, webhook_task.into()))
+        .map(|ref hash_task| ApiSuccess::new(StatusCode::CREATED, hash_task.into()))
 }
 
 // --- General purpose API request / response wrapper types
@@ -79,10 +76,10 @@ impl From<anyhow::Error> for ApiError {
     }
 }
 
-impl From<CreateWebhookTaskError> for ApiError {
-    fn from(value: CreateWebhookTaskError) -> Self {
+impl From<CreateHashTaskError> for ApiError {
+    fn from(value: CreateHashTaskError) -> Self {
         match value {
-            CreateWebhookTaskError::Unknown(cause) => {
+            CreateHashTaskError::Unknown(cause) => {
                 tracing::error!("{:?}\n{}", cause, cause.backtrace());
                 Self::InternalServerError("Internal server error".to_string())
             }
@@ -137,41 +134,36 @@ pub struct ApiErrorData {
     pub message: String,
 }
 
-// --- Webhook-Task-Specific request / response types
+// --- Hash-Task-Specific request / response types
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub struct CreateWebhookTaskHttpRequestBody {
+pub struct CreateHashTaskHttpRequestBody {
     deadline: chrono::DateTime<Utc>,
-    url: Url,
-    body: String,
+    algorithm: String,
+    input: String,
 }
 
-impl CreateWebhookTaskHttpRequestBody {
+impl CreateHashTaskHttpRequestBody {
     /// Convert from HTTP type to Domain type.
     ///
     /// Better validation would go here
-    fn try_into_domain(self) -> Result<CreateWebhookTaskRequest> {
-        let deadline = WebhookTaskDeadline::from(self.deadline);
-        let url = WebhookTaskUrl::from(self.url);
-        let body = WebhookTaskBody::from(self.body);
-        let request = CreateWebhookTaskRequest {
-            deadline,
-            url,
-            body,
-        };
+    fn try_into_domain(self) -> Result<CreateHashTaskRequest> {
+        let deadline = HashTaskDeadline::from(self.deadline);
+        let secret = HashTaskSecret::from(self.input);
+        let request = CreateHashTaskRequest { deadline, secret };
         Ok(request)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct CreateWebhookTaskResponseData {
+pub struct CreateHashTaskResponseData {
     //
     task_id: String,
 }
 
-impl From<&WebhookTask> for CreateWebhookTaskResponseData {
-    fn from(value: &WebhookTask) -> Self {
-        CreateWebhookTaskResponseData {
+impl From<&HashTask> for CreateHashTaskResponseData {
+    fn from(value: &HashTask) -> Self {
+        CreateHashTaskResponseData {
             task_id: value.id().to_string(),
         }
     }

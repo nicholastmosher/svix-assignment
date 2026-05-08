@@ -10,7 +10,7 @@ CREATE TABLE webhooks (
 );
 
 CREATE TABLE hashtasks (
-    id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY NOT NULL,
     deadline TEXT NOT NULL,
     secret TEXT NOT NULL,
     executed_at TEXT

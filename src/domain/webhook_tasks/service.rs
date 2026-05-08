@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::domain::webhook_tasks::{
-    model::{CreateWebhookTaskRequest, WebhookTask},
+    model::{CreateWebhookTaskRequest, WebhookTask, WebhookTaskId},
     ports::{WebhookTaskRepository, WebhookTaskService},
 };
 
@@ -31,8 +31,13 @@ where
         Ok(webhook_task)
     }
 
-    async fn get_upcoming_webhook_tasks(&self, count: u32) -> Result<Vec<WebhookTask>> {
-        let upcoming_tasks = self.repo.get_upcoming_webhook_tasks(count).await?;
+    async fn get_ready_webhook_tasks(&self, count: u32) -> Result<Vec<WebhookTask>> {
+        let upcoming_tasks = self.repo.get_ready_webhook_tasks(count).await?;
         Ok(upcoming_tasks)
+    }
+
+    async fn finish_webhook_task(&self, id: &WebhookTaskId) -> Result<()> {
+        self.repo.finish_webhook_task(id).await?;
+        Ok(())
     }
 }

@@ -1,20 +1,31 @@
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::{Context, Result};
 use async_shutdown::ShutdownManager;
+use chrono::Utc;
 use clap::Parser;
-use svix_takehome::{AppConfig, AppContext, spawn_tasks};
+use svix_takehome::{AppCmd, AppConfig, AppContext, spawn_tasks};
 use tracing::{error, info};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
+        .with(EnvFilter::from_default_env())
         .init();
 
     let config = AppConfig::parse();
+
+    if let Some(AppCmd::PrintDeadline { duration }) = &config.subcommand {
+        //
+        let now = Utc::now();
+        let from_now = now + *duration;
+        let serialized = serde_json::to_string(&from_now).unwrap();
+        println!("{}", serialized);
+    }
+
     let shutdown = ShutdownManager::new();
     let context = AppContext::new(config.clone(), shutdown.clone());
     let context = Arc::new(context);

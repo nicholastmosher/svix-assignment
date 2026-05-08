@@ -2,7 +2,9 @@ use std::pin::Pin;
 
 use anyhow::Result;
 
-use crate::domain::webhook_tasks::model::{CreateWebhookTaskRequest, WebhookTask};
+use crate::domain::webhook_tasks::model::{
+    CreateWebhookTaskRequest, FinishWebhookTaskRequest, WebhookTask, WebhookTaskId,
+};
 
 /// Domain behavior for services working with WebhookTasks.
 pub trait WebhookTaskService: 'static + Clone + Send + Sync {
@@ -11,10 +13,12 @@ pub trait WebhookTaskService: 'static + Clone + Send + Sync {
         req: &CreateWebhookTaskRequest,
     ) -> impl Future<Output = Result<WebhookTask>> + Send;
 
-    fn get_upcoming_webhook_tasks(
+    fn get_ready_webhook_tasks(
         &self,
         count: u32,
     ) -> impl Future<Output = Result<Vec<WebhookTask>>> + Send;
+
+    fn finish_webhook_task(&self, id: &WebhookTaskId) -> impl Future<Output = Result<()>> + Send;
 }
 
 pub trait DynWebhookTaskService: 'static + Send + Sync {
@@ -23,10 +27,15 @@ pub trait DynWebhookTaskService: 'static + Send + Sync {
         req: &CreateWebhookTaskRequest,
     ) -> Pin<Box<dyn Future<Output = Result<WebhookTask>> + Send>>;
 
-    fn get_upcoming_webhook_tasks(
+    fn get_ready_webhook_tasks(
         &self,
         count: u32,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<WebhookTask>>> + Send>>;
+
+    fn finish_webhook_task(
+        &self,
+        id: &WebhookTaskId,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
 }
 
 impl<T: WebhookTaskService> DynWebhookTaskService for T {
@@ -42,14 +51,26 @@ impl<T: WebhookTaskService> DynWebhookTaskService for T {
         })
     }
 
-    fn get_upcoming_webhook_tasks(
+    fn get_ready_webhook_tasks(
         &self,
         count: u32,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<WebhookTask>>> + Send>> {
         let this = self.clone();
         Box::pin(async move {
-            let webhook_tasks = this.get_upcoming_webhook_tasks(count).await?;
+            let webhook_tasks = this.get_ready_webhook_tasks(count).await?;
             Ok(webhook_tasks)
+        })
+    }
+
+    fn finish_webhook_task(
+        &self,
+        id: &WebhookTaskId,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
+        let this = self.clone();
+        let id = id.clone();
+        Box::pin(async move {
+            this.finish_webhook_task(&id).await?;
+            Ok(())
         })
     }
 }
@@ -64,8 +85,10 @@ pub trait WebhookTaskRepository: 'static + Clone + Send + Sync {
         req: &CreateWebhookTaskRequest,
     ) -> impl Future<Output = Result<WebhookTask>> + Send;
 
-    fn get_upcoming_webhook_tasks(
+    fn get_ready_webhook_tasks(
         &self,
         count: u32,
     ) -> impl Future<Output = Result<Vec<WebhookTask>>> + Send;
+
+    fn finish_webhook_task(&self, id: &WebhookTaskId) -> impl Future<Output = Result<()>> + Send;
 }

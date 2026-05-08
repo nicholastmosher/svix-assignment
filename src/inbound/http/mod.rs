@@ -1,13 +1,18 @@
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use axum::{Router, routing::post};
-
-use crate::{
-    AppConfig, domain::webhook_tasks::ports::WebhookTaskService,
-    inbound::http::webhook_tasks::create_webhook_task,
+use axum::{
+    Router,
+    routing::{get, post},
 };
 
+use crate::{
+    AppConfig,
+    domain::{hash_tasks::ports::HashTaskService, webhook_tasks::ports::WebhookTaskService},
+    inbound::http::{hash_tasks::create_hash_task, webhook_tasks::create_webhook_task},
+};
+
+pub mod hash_tasks;
 pub mod webhook_tasks;
 
 pub struct HttpConfig {
@@ -23,8 +28,13 @@ impl From<&AppConfig> for HttpConfig {
 }
 
 #[derive(Debug, Clone)]
-pub struct AppState<S: WebhookTaskService> {
-    webhook_service: Arc<S>,
+pub struct AppState<H, W>
+where
+    H: HashTaskService,
+    W: WebhookTaskService,
+{
+    hash_service: Arc<H>,
+    webhook_service: Arc<W>,
 }
 
 pub struct HttpServer {
@@ -36,15 +46,18 @@ impl HttpServer {
     pub async fn new(
         //
         config: &HttpConfig,
+        hash_service: impl HashTaskService,
         webhook_service: impl WebhookTaskService,
     ) -> Result<Self> {
         let state = AppState {
             //
+            hash_service: Arc::new(hash_service),
             webhook_service: Arc::new(webhook_service),
         };
 
         let router = Router::new()
             //
+            .route("/health", get(async || "Alive"))
             .nest("/api", api_routes())
             .with_state(state);
 
@@ -66,6 +79,12 @@ impl HttpServer {
     }
 }
 
-fn api_routes<WS: WebhookTaskService>() -> Router<AppState<WS>> {
-    Router::new().route("/webhook_tasks", post(create_webhook_task::<WS>))
+fn api_routes<HS, WS>() -> Router<AppState<HS, WS>>
+where
+    HS: HashTaskService,
+    WS: WebhookTaskService,
+{
+    Router::new()
+        .route("/webhook_tasks", post(create_webhook_task::<HS, WS>))
+        .route("/hash_tasks", post(create_hash_task::<HS, WS>))
 }

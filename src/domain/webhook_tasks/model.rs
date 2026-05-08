@@ -8,6 +8,7 @@ use thiserror::Error;
 use url::Url;
 use uuid::Uuid;
 
+#[derive(Debug)]
 pub struct WebhookTask {
     /// Unique ID for the webhook task.
     pub id: WebhookTaskId,
@@ -71,7 +72,8 @@ impl WebhookTaskId {
 impl FromStr for WebhookTaskId {
     type Err = <Uuid as FromStr>::Err;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(s.parse()?)
+        let uuid = s.parse::<Uuid>()?;
+        Ok(Self(uuid))
     }
 }
 
@@ -119,4 +121,10 @@ pub struct CreateWebhookTaskRequest {
 pub enum CreateWebhookTaskError {
     #[error(transparent)]
     Unknown(#[from] anyhow::Error),
+}
+
+/// Indicates that the given WebhookTask has been successfully executed.
+#[derive(Debug, Clone)]
+pub struct FinishWebhookTaskRequest {
+    pub id: WebhookTaskId,
 }

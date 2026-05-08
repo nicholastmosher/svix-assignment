@@ -6,13 +6,19 @@ use std::{collections::HashMap, ops::ControlFlow, sync::Arc, time::Duration};
 use anyhow::{Context as _, Result};
 use futures::{FutureExt, Stream, StreamExt as _};
 use tokio_stream::wrappers::IntervalStream;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::{
     AppContext,
-    domain::webhook_tasks::{
-        model::{WebhookTask, WebhookTaskId},
-        ports::{DynWebhookTaskService, WebhookTaskService},
+    domain::{
+        hash_tasks::{
+            model::HashTask,
+            ports::{DynHashTaskService, HashTaskService},
+        },
+        webhook_tasks::{
+            model::{WebhookTask, WebhookTaskId},
+            ports::{DynWebhookTaskService, WebhookTaskService},
+        },
     },
 };
 
@@ -24,10 +30,12 @@ pub struct ScheduleWorker {
 impl ScheduleWorker {
     pub fn spawn(
         context: Arc<AppContext>,
+        hash_task_service: impl HashTaskService,
         webhook_task_service: impl WebhookTaskService,
     ) -> Result<Self> {
         let shutdown = context.shutdown.clone();
-        let schedule_worker = ScheduleWorkerState::new(context, webhook_task_service)?;
+        let schedule_worker =
+            ScheduleWorkerState::new(context, hash_task_service, webhook_task_service)?;
 
         let future = schedule_worker.run();
         // If the schedule worker quits for any reason, trigger the whole system to shut down
@@ -46,6 +54,8 @@ impl ScheduleWorker {
 pub enum ScheduleWorkerInput {
     /// Emitted when the schedule worker is being shut down
     Shutdown,
+    /// Emitted when it's time to check for new ready hash tasks to process
+    DispatchHash,
     /// Emitted when it's time to check for new ready webhooks to dispatch
     DispatchWebhook,
 }
@@ -54,6 +64,7 @@ pub enum ScheduleWorkerInput {
 pub struct ScheduleWorkerState {
     context: Arc<AppContext>,
     client: reqwest::Client,
+    hash_task_service: Arc<dyn DynHashTaskService>,
     webhook_task_service: Arc<dyn DynWebhookTaskService>,
     inflight_tasks: HashMap<WebhookTaskId, WebhookTask>,
 }
@@ -61,6 +72,7 @@ pub struct ScheduleWorkerState {
 impl ScheduleWorkerState {
     pub fn new(
         context: Arc<AppContext>,
+        hash_task_service: impl HashTaskService,
         webhook_task_service: impl WebhookTaskService,
     ) -> Result<Self> {
         let client = reqwest::Client::builder()
@@ -70,6 +82,7 @@ impl ScheduleWorkerState {
         Ok(Self {
             context,
             client,
+            hash_task_service: Arc::new(hash_task_service),
             webhook_task_service: Arc::new(webhook_task_service),
             inflight_tasks: Default::default(),
         })
@@ -83,12 +96,22 @@ impl ScheduleWorkerState {
             .wait_shutdown_triggered()
             .into_stream()
             .map(|_| ScheduleWorkerInput::Shutdown);
-        let interval = tokio::time::interval(self.context.config.dispatch_period);
-        let dispatch_stream =
-            IntervalStream::new(interval).map(|_| ScheduleWorkerInput::DispatchWebhook);
+        let hash_dispatch_interval =
+            tokio::time::interval(self.context.config.hash_dispatch_period);
+        let hash_dispatch_stream =
+            IntervalStream::new(hash_dispatch_interval).map(|_| ScheduleWorkerInput::DispatchHash);
+        let webhook_dispatch_interval =
+            tokio::time::interval(self.context.config.webhook_dispatch_period);
+        let webhook_dispatch_stream = IntervalStream::new(webhook_dispatch_interval)
+            .map(|_| ScheduleWorkerInput::DispatchWebhook);
 
         use futures_concurrency::prelude::*;
-        (shutdown_stream, dispatch_stream).merge()
+        (
+            shutdown_stream,
+            hash_dispatch_stream,
+            webhook_dispatch_stream,
+        )
+            .merge()
     }
 
     /// Top-level run loop, responsible for error handling
@@ -138,29 +161,56 @@ impl ScheduleWorkerState {
                 // Graceful shutdown path
                 return Ok(ControlFlow::Break(()));
             }
+            ScheduleWorkerInput::DispatchHash => {
+                self.try_handle_dispatch_hash().await?;
+            }
             ScheduleWorkerInput::DispatchWebhook => {
-                self.try_handle_dispatch().await?;
+                info!("DispatchWebhook tick");
+                self.try_handle_dispatch_webhook().await?;
             }
         }
 
         Ok(ControlFlow::Continue(()))
     }
 
-    async fn try_handle_dispatch(&mut self) -> Result<()> {
+    async fn try_handle_dispatch_hash(&mut self) -> Result<()> {
         let upcoming_tasks = self
-            .webhook_task_service
-            .get_upcoming_webhook_tasks(10)
+            .hash_task_service
+            .get_ready_hash_tasks(10)
             .await
             .context("failed to fetch upcoming tasks from service")?;
 
         for task in upcoming_tasks {
-            let future = dispatch_task(self.client.clone(), task);
+            let future = dispatch_hash_task(task);
             // Prevent shutdown until all tasks complete
             let future = self
                 .context
                 .shutdown
                 .wrap_delay_shutdown(future)
-                .context("refusing to dispatch new tasks, shutdown in progress")?;
+                .context("refusing to dispatch new hash tasks, shutdown in progress")?;
+            let _handle = tokio::spawn(future);
+        }
+
+        Ok(())
+    }
+
+    async fn try_handle_dispatch_webhook(&mut self) -> Result<()> {
+        let ready_tasks = self
+            .webhook_task_service
+            .get_ready_webhook_tasks(10)
+            .await
+            .context("failed to fetch upcoming tasks from service")?;
+
+        debug!(?ready_tasks, "Handling webhook tasks");
+        for task in ready_tasks {
+            let future =
+                dispatch_webhook_task(self.client.clone(), self.webhook_task_service.clone(), task);
+            // Prevent shutdown until all tasks complete
+            let future = self
+                .context
+                .shutdown
+                .wrap_delay_shutdown(future)
+                .context("refusing to dispatch new webhook tasks, shutdown in progress")?;
             let _handle = tokio::spawn(future);
         }
 
@@ -168,17 +218,47 @@ impl ScheduleWorkerState {
     }
 }
 
-/// Top-level of a new task, dispatches one batch of tasks
-pub async fn dispatch_task(client: reqwest::Client, task: WebhookTask) {
-    let result = try_dispatch_task(client, task).await;
+pub async fn dispatch_hash_task(task: HashTask) -> Result<()> {
+    //
+    Ok(())
 }
 
-pub async fn try_dispatch_task(client: reqwest::Client, task: WebhookTask) -> Result<()> {
+pub async fn try_dispatch_hash_task() -> Result<()> {
+    Ok(())
+}
+
+/// Top-level of a new task, dispatches one webhook task
+pub async fn dispatch_webhook_task(
+    client: reqwest::Client,
+    service: Arc<dyn DynWebhookTaskService>,
+    task: WebhookTask,
+) {
+    let id = task.id.clone();
+    let result = try_dispatch_webhook_task(client, service, task).await;
+
+    // On error, log and quit the task.
+    // On the next dispatch cycle, this task will be retried.
+    if let Err(error) = result {
+        tracing::error!("failed to dispatch webhook task: {}", error);
+    } else {
+        info!(?id, "Dispatched webhook task");
+    }
+}
+
+pub async fn try_dispatch_webhook_task(
+    client: reqwest::Client,
+    service: Arc<dyn DynWebhookTaskService>,
+    task: WebhookTask,
+) -> Result<()> {
     let response = client
         .post(task.url().url().clone())
         .body(task.body.into_body())
         .send()
         .await?;
+
+    if response.status().is_success() {
+        service.finish_webhook_task(&task.id).await?;
+    }
 
     Ok(())
 }

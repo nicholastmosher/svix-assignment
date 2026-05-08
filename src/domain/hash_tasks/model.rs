@@ -15,18 +15,18 @@ pub struct HashTask {
     pub deadline: HashTaskDeadline,
 
     /// The input data to hash.
-    pub input: HashTaskSecret,
+    pub secret: HashTaskSecret,
 
     /// The timestamp at which the hash task was executed.
     pub executed_at: Option<HashTaskExecutedAt>,
 }
 
 impl HashTask {
-    pub fn new(id: HashTaskId, deadline: HashTaskDeadline, input: HashTaskSecret) -> Self {
+    pub fn new(id: HashTaskId, deadline: HashTaskDeadline, secret: HashTaskSecret) -> Self {
         Self {
             id,
             deadline,
-            input,
+            secret,
             executed_at: None,
         }
     }
@@ -39,8 +39,8 @@ impl HashTask {
         &self.deadline
     }
 
-    pub fn input(&self) -> &HashTaskSecret {
-        &self.input
+    pub fn secret(&self) -> &HashTaskSecret {
+        &self.secret
     }
 }
 
@@ -67,10 +67,6 @@ pub struct HashTaskDeadline(#[from] chrono::DateTime<Utc>);
 
 #[derive(Clone, Debug, Display, PartialEq, Eq, PartialOrd, Ord, Hash, From, sqlx::Type)]
 #[sqlx(transparent)]
-pub struct HashTaskAlgorithm(#[from] String);
-
-#[derive(Clone, Debug, Display, PartialEq, Eq, PartialOrd, Ord, Hash, From, sqlx::Type)]
-#[sqlx(transparent)]
 pub struct HashTaskSecret(#[from] String);
 
 #[derive(Clone, Debug, Display, PartialEq, Eq, PartialOrd, Ord, Hash, From, sqlx::Type)]
@@ -84,11 +80,8 @@ pub struct CreateHashTaskRequest {
     /// The scheduled deadline at which to execute the hash task.
     pub deadline: HashTaskDeadline,
 
-    /// The hash algorithm to use for the task.
-    pub algorithm: HashTaskAlgorithm,
-
     /// The input data to hash.
-    pub input: HashTaskSecret,
+    pub secret: HashTaskSecret,
 }
 
 #[derive(Debug, Error)]

@@ -11,9 +11,9 @@ pub trait HashTaskService: 'static + Clone + Send + Sync {
         req: &CreateHashTaskRequest,
     ) -> impl Future<Output = Result<HashTask>> + Send;
 
-    fn get_upcoming_hash_tasks(
+    fn get_ready_hash_tasks(
         &self,
-        count: u32,
+        limit: u32,
     ) -> impl Future<Output = Result<Vec<HashTask>>> + Send;
 }
 
@@ -23,9 +23,9 @@ pub trait DynHashTaskService: 'static + Send + Sync {
         req: &CreateHashTaskRequest,
     ) -> Pin<Box<dyn Future<Output = Result<HashTask>> + Send>>;
 
-    fn get_upcoming_hash_tasks(
+    fn get_ready_hash_tasks(
         &self,
-        count: u32,
+        limit: u32,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<HashTask>>> + Send>>;
 }
 
@@ -42,13 +42,13 @@ impl<T: HashTaskService> DynHashTaskService for T {
         })
     }
 
-    fn get_upcoming_hash_tasks(
+    fn get_ready_hash_tasks(
         &self,
-        count: u32,
+        limit: u32,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<HashTask>>> + Send>> {
         let this = self.clone();
         Box::pin(async move {
-            let hash_tasks = this.get_upcoming_hash_tasks(count).await?;
+            let hash_tasks = this.get_ready_hash_tasks(limit).await?;
             Ok(hash_tasks)
         })
     }
@@ -64,7 +64,7 @@ pub trait HashTaskRepository: 'static + Clone + Send + Sync {
         req: &CreateHashTaskRequest,
     ) -> impl Future<Output = Result<HashTask>> + Send;
 
-    fn get_upcoming_hash_tasks(
+    fn get_ready_hash_tasks(
         &self,
         count: u32,
     ) -> impl Future<Output = Result<Vec<HashTask>>> + Send;

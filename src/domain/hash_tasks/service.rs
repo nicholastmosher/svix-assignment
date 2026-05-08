@@ -31,8 +31,8 @@ where
         Ok(hash_task)
     }
 
-    async fn get_upcoming_hash_tasks(&self, count: u32) -> Result<Vec<HashTask>> {
-        let upcoming_tasks = self.repo.get_upcoming_hash_tasks(count).await?;
+    async fn get_ready_hash_tasks(&self, count: u32) -> Result<Vec<HashTask>> {
+        let upcoming_tasks = self.repo.get_ready_hash_tasks(count).await?;
         Ok(upcoming_tasks)
     }
 }

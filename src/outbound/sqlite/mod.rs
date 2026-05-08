@@ -2,6 +2,7 @@ use std::str::FromStr as _;
 
 use anyhow::{Context as _, Result};
 
+pub mod hash_tasks;
 pub mod webhook_tasks;
 
 #[derive(Debug, Clone)]
