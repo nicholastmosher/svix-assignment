@@ -2,7 +2,6 @@
 //! dispatching tasks as necessary
 
 use std::{
-    collections::HashMap,
     hash::{DefaultHasher, Hash, Hasher},
     ops::ControlFlow,
     sync::Arc,
@@ -23,7 +22,7 @@ use crate::{
             ports::{DynHashTaskService, HashTaskService},
         },
         webhook_tasks::{
-            model::{WebhookTask, WebhookTaskId},
+            model::{GetWebhookTaskRequests, WebhookTask},
             ports::{DynWebhookTaskService, WebhookTaskService},
         },
     },
@@ -31,7 +30,7 @@ use crate::{
 
 /// External handle-API to spawn and interact with the ScheduleWorker
 pub struct ScheduleWorker {
-    worker_handle: tokio::task::JoinHandle<()>,
+    _worker_handle: tokio::task::JoinHandle<()>,
 }
 
 impl ScheduleWorker {
@@ -51,9 +50,9 @@ impl ScheduleWorker {
         let future = shutdown
             .wrap_delay_shutdown(future)
             .context("Cannot launch ScheduleWorker, system is already shutting down")?;
-        let worker_handle = tokio::spawn(future);
+        let _worker_handle = tokio::spawn(future);
 
-        Ok(Self { worker_handle })
+        Ok(Self { _worker_handle })
     }
 }
 
@@ -200,9 +199,10 @@ impl ScheduleWorkerState {
     }
 
     async fn try_handle_dispatch_webhook(&mut self) -> Result<()> {
+        let task_req = GetWebhookTaskRequests::ready();
         let ready_tasks = self
             .webhook_task_service
-            .get_ready_webhook_tasks(10)
+            .get_webhook_tasks(&task_req)
             .await
             .context("failed to fetch upcoming tasks from service")?;
 

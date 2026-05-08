@@ -1,7 +1,7 @@
 use anyhow::Result;
 use axum::{
     Json,
-    extract::State,
+    extract::{Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -9,14 +9,16 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use url::Url;
+use uuid::Uuid;
 
 use crate::{
     domain::{
         hash_tasks::ports::HashTaskService,
         webhook_tasks::{
             model::{
-                CreateWebhookTaskError, CreateWebhookTaskRequest, WebhookTask, WebhookTaskBody,
-                WebhookTaskDeadline, WebhookTaskUrl,
+                CreateWebhookTaskError, CreateWebhookTaskRequest, GetWebhookTaskRequests,
+                WebhookTask, WebhookTaskBody, WebhookTaskDeadline, WebhookTaskId, WebhookTaskState,
+                WebhookTaskUrl,
             },
             ports::WebhookTaskService,
         },
@@ -40,6 +42,24 @@ where
         .await
         .map_err(ApiError::from)
         .map(|ref webhook_task| ApiSuccess::new(StatusCode::CREATED, webhook_task.into()))
+}
+
+pub async fn get_webhook_tasks<HS, WS>(
+    State(state): State<AppState<HS, WS>>,
+    Query(query): Query<GetWebhookTaskHttpQueryParams>,
+) -> Result<ApiSuccess<GetWebhookTaskResponseData>, ApiError>
+where
+    HS: HashTaskService,
+    WS: WebhookTaskService,
+{
+    info!("Received request to get webhook task");
+    let id = query.try_into_domain()?;
+    state
+        .webhook_service
+        .get_webhook_tasks(&id)
+        .await
+        .map_err(ApiError::from)
+        .map(|ref webhook_tasks| ApiSuccess::new(StatusCode::OK, webhook_tasks.into()))
 }
 
 // --- General purpose API request / response wrapper types
@@ -165,7 +185,6 @@ impl CreateWebhookTaskHttpRequestBody {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CreateWebhookTaskResponseData {
-    //
     task_id: String,
 }
 
@@ -173,6 +192,70 @@ impl From<&WebhookTask> for CreateWebhookTaskResponseData {
     fn from(value: &WebhookTask) -> Self {
         CreateWebhookTaskResponseData {
             task_id: value.id().to_string(),
+        }
+    }
+}
+
+//
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WebhookTaskStateHttpQueryParams {
+    Pending,
+    Ready,
+    Finished,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct GetWebhookTaskHttpQueryParams {
+    id: Option<Uuid>,
+    state: Option<WebhookTaskStateHttpQueryParams>,
+    limit: Option<u32>,
+}
+
+impl GetWebhookTaskHttpQueryParams {
+    fn try_into_domain(self) -> Result<GetWebhookTaskRequests> {
+        let id = self.id.map(|id| WebhookTaskId::from(id));
+        let state = self.state.map(|state| match state {
+            WebhookTaskStateHttpQueryParams::Pending => WebhookTaskState::Pending,
+            WebhookTaskStateHttpQueryParams::Ready => WebhookTaskState::Ready,
+            WebhookTaskStateHttpQueryParams::Finished => WebhookTaskState::Finished,
+        });
+
+        Ok(GetWebhookTaskRequests {
+            id,
+            state,
+            limit: self.limit,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GetWebhookTaskResponseDataItem {
+    deadline: chrono::DateTime<Utc>,
+    url: Url,
+    body: String,
+}
+
+impl From<&WebhookTask> for GetWebhookTaskResponseDataItem {
+    fn from(value: &WebhookTask) -> Self {
+        GetWebhookTaskResponseDataItem {
+            deadline: value.deadline().utc().clone(),
+            url: value.url().url().clone(),
+            body: value.body().to_string().clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GetWebhookTaskResponseData {
+    tasks: Vec<GetWebhookTaskResponseDataItem>,
+}
+
+impl From<&Vec<WebhookTask>> for GetWebhookTaskResponseData {
+    fn from(value: &Vec<WebhookTask>) -> Self {
+        GetWebhookTaskResponseData {
+            tasks: value.iter().map(|task| task.into()).collect(),
         }
     }
 }

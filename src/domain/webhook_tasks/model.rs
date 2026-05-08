@@ -80,6 +80,11 @@ impl FromStr for WebhookTaskId {
 #[derive(Clone, Debug, Display, PartialEq, Eq, PartialOrd, Ord, Hash, From, sqlx::Type)]
 #[sqlx(transparent)]
 pub struct WebhookTaskDeadline(#[from] chrono::DateTime<Utc>);
+impl WebhookTaskDeadline {
+    pub fn utc(&self) -> &chrono::DateTime<Utc> {
+        &self.0
+    }
+}
 
 #[derive(Clone, Debug, Display, PartialEq, Eq, PartialOrd, Ord, Hash, From, sqlx::Type)]
 #[sqlx(transparent)]
@@ -121,4 +126,30 @@ pub struct CreateWebhookTaskRequest {
 pub enum CreateWebhookTaskError {
     #[error(transparent)]
     Unknown(#[from] anyhow::Error),
+}
+
+//
+
+#[derive(Debug, Clone)]
+pub enum WebhookTaskState {
+    Pending,
+    Ready,
+    Finished,
+}
+
+#[derive(Debug, Clone)]
+pub struct GetWebhookTaskRequests {
+    pub id: Option<WebhookTaskId>,
+    pub state: Option<WebhookTaskState>,
+    pub limit: Option<u32>,
+}
+
+impl GetWebhookTaskRequests {
+    pub fn ready() -> Self {
+        Self {
+            id: None,
+            state: Some(WebhookTaskState::Ready),
+            limit: None,
+        }
+    }
 }

@@ -9,8 +9,8 @@ use url::Url;
 use crate::{
     domain::webhook_tasks::{
         model::{
-            CreateWebhookTaskRequest, WebhookTask, WebhookTaskBody, WebhookTaskDeadline,
-            WebhookTaskId, WebhookTaskUrl,
+            CreateWebhookTaskRequest, GetWebhookTaskRequests, WebhookTask, WebhookTaskBody,
+            WebhookTaskDeadline, WebhookTaskId, WebhookTaskState, WebhookTaskUrl,
         },
         ports::WebhookTaskRepository,
     },
@@ -42,22 +42,79 @@ impl Sqlite {
         Ok(id)
     }
 
-    async fn get_ready_webhook_tasks(
+    async fn get_webhook_tasks(
         &self,
         pool: &sqlx::SqlitePool,
-        limit: u32,
+        req: &GetWebhookTaskRequests,
     ) -> Result<Vec<WebhookTaskDto>> {
+        let limit = req.limit.unwrap_or(10);
         debug!(limit, "Querying Ready Webhook Tasks");
-        let query = sqlx::query_as!(
-            WebhookTaskDto,
-            "SELECT id, deadline, url, body \
-            FROM webhooks \
-            WHERE executed_at IS NULL AND deadline <= datetime('now') \
-            ORDER BY deadline ASC \
-            LIMIT $1",
-            limit,
-        );
-        let rows = query.fetch_all(pool).await?;
+
+        if let Some(id) = &req.id {
+            let id = &id.to_string();
+            let query = sqlx::query_as!(
+                WebhookTaskDto,
+                "SELECT id, deadline, url, body \
+                FROM webhooks \
+                WHERE id = $1",
+                id
+            );
+            let row = query.fetch_one(pool).await?;
+            let rows = vec![row];
+            return Ok(rows);
+        }
+
+        let rows = match &req.state {
+            Some(WebhookTaskState::Pending) => {
+                let query = sqlx::query_as!(
+                    WebhookTaskDto,
+                    "SELECT id, deadline, url, body \
+                    FROM webhooks \
+                    WHERE executed_at IS NULL AND deadline > datetime('now') \
+                    ORDER BY deadline ASC \
+                    LIMIT $1",
+                    limit,
+                );
+                query.fetch_all(pool).await?
+            }
+            Some(WebhookTaskState::Ready) => {
+                let query = sqlx::query_as!(
+                    WebhookTaskDto,
+                    "SELECT id, deadline, url, body \
+                    FROM webhooks \
+                    WHERE executed_at IS NULL AND deadline <= datetime('now') \
+                    ORDER BY deadline ASC \
+                    LIMIT $1",
+                    limit,
+                );
+                query.fetch_all(pool).await?
+            }
+            Some(WebhookTaskState::Finished) => {
+                let query = sqlx::query_as!(
+                    WebhookTaskDto,
+                    "SELECT id, deadline, url, body \
+                    FROM webhooks \
+                    WHERE executed_at IS NOT NULL \
+                    ORDER BY executed_at ASC \
+                    LIMIT $1",
+                    limit,
+                );
+                query.fetch_all(pool).await?
+            }
+            None => {
+                // Query all
+                let query = sqlx::query_as!(
+                    WebhookTaskDto,
+                    "SELECT id, deadline, url, body \
+                    FROM webhooks \
+                    ORDER BY deadline ASC \
+                    LIMIT $1",
+                    limit,
+                );
+                query.fetch_all(pool).await?
+            }
+        };
+
         debug!(
             limit,
             count = rows.len(),
@@ -102,8 +159,8 @@ impl WebhookTaskRepository for Sqlite {
         Ok(webhook_task)
     }
 
-    async fn get_ready_webhook_tasks(&self, count: u32) -> Result<Vec<WebhookTask>> {
-        let dtos = self.get_ready_webhook_tasks(&self.pool, count).await?;
+    async fn get_webhook_tasks(&self, req: &GetWebhookTaskRequests) -> Result<Vec<WebhookTask>> {
+        let dtos = self.get_webhook_tasks(&self.pool, req).await?;
         let webhook_tasks = dtos
             .into_iter()
             .map(|dto| WebhookTask::try_from(dto))

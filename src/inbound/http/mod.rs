@@ -9,7 +9,10 @@ use axum::{
 use crate::{
     AppConfig,
     domain::{hash_tasks::ports::HashTaskService, webhook_tasks::ports::WebhookTaskService},
-    inbound::http::{hash_tasks::create_hash_task, webhook_tasks::create_webhook_task},
+    inbound::http::{
+        hash_tasks::create_hash_task,
+        webhook_tasks::{create_webhook_task, get_webhook_tasks},
+    },
 };
 
 pub mod hash_tasks;
@@ -86,5 +89,6 @@ where
 {
     Router::new()
         .route("/webhook_tasks", post(create_webhook_task::<HS, WS>))
+        .route("/webhook_tasks", get(get_webhook_tasks::<HS, WS>))
         .route("/hash_tasks", post(create_hash_task::<HS, WS>))
 }
