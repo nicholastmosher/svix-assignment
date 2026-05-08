@@ -93,6 +93,7 @@ pub struct WebhookTaskExecutedAt(#[from] chrono::DateTime<Utc>);
 
 // - Domain-level (programmatic) request/response objects
 
+#[derive(Debug, Clone)]
 pub struct CreateWebhookTaskRequest {
     /// The scheduled deadline at which to execute the webhook task.
     pub deadline: WebhookTaskDeadline,
