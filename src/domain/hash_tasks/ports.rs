@@ -19,6 +19,7 @@ pub trait HashTaskService: 'static + Clone + Send + Sync {
     fn finish_hash_task(&self, id: &HashTaskId) -> impl Future<Output = Result<()>> + Send;
 }
 
+/// Object-safe trait definition, used for wrapping the service as `Arc<dyn DynHashTaskService>`
 pub trait DynHashTaskService: 'static + Send + Sync {
     fn create_hash_task(
         &self,

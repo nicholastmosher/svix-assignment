@@ -21,6 +21,7 @@ pub trait WebhookTaskService: 'static + Clone + Send + Sync {
     fn finish_webhook_task(&self, id: &WebhookTaskId) -> impl Future<Output = Result<()>> + Send;
 }
 
+/// Object-safe trait definition, used for wrapping the service as `Arc<dyn DynWebhookTaskService>`
 pub trait DynWebhookTaskService: 'static + Send + Sync {
     fn create_webhook_task(
         &self,

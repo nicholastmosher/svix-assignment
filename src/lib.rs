@@ -20,7 +20,7 @@ pub mod outbound;
 
 #[derive(Debug, Clone, Parser)]
 pub struct AppConfig {
-    #[clap(long, env = "DATABASE_URL")]
+    #[clap(long, env = "DATABASE_URL", default_value = "sqlite:app.db")]
     pub database_url: String,
     #[clap(long, env = "HTTP_PORT", default_value = "8080")]
     pub http_port: u16,
